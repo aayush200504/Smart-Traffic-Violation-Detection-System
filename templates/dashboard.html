@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}📊 Dashboard{% endblock %}
+{% block content %}
+<div class="stats-grid">
+  <div class="stat-card blue"><div class="stat-icon">⚠️</div><div class="stat-val">{{ stats.total_violations }}</div><div class="stat-label">Total Violations Detected</div></div>
+  <div class="stat-card amber"><div class="stat-icon">💰</div><div class="stat-val">₹{{ "{:,}".format(stats.total_fines|int) }}</div><div class="stat-label">Total Fines Generated</div></div>
+  <div class="stat-card red"><div class="stat-icon">🔴</div><div class="stat-val">{{ stats.pending_fines }}</div><div class="stat-label">Pending / Unpaid Fines</div></div>
+  <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-val">{{ stats.paid_fines }}</div><div class="stat-label">Fines Paid</div></div>
+</div>
+
+<div class="grid-2" style="margin-bottom:28px;">
+  <div class="card">
+    <div class="section-header"><div class="section-title">Violations by Type</div></div>
+    <canvas id="typeChart" height="200"></canvas>
+  </div>
+  <div class="card">
+    <div class="section-header"><div class="section-title">Monthly Trend</div></div>
+    <canvas id="trendChart" height="200"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-header">
+    <div class="section-title">Recent Violations</div>
+    <a href="{{ url_for('violations') }}" class="btn btn-outline btn-sm">View All →</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Challan ID</th><th>Plate</th><th>Owner</th><th>Violation</th>
+          <th>Amount</th><th>Status</th><th>Date</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent %}
+        {% set rid = r.id %}
+        <tr>
+          <td><code style="font-size:11px;color:var(--muted);">{{ rid }}</code></td>
+          <td><span class="plate-badge">{{ r.plate_number }}</span></td>
+          <td>{{ r.name or '—' }}</td>
+          <td>{{ r.violation_name }}</td>
+          <td style="font-weight:700;color:var(--amber);">₹{{ "{:,}".format(r.amount) }}</td>
+          <td>
+            {% if r.status == 'paid' %}
+              <span class="status-paid">● PAID</span>
+            {% else %}
+              <span class="status-pending">● PENDING</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--muted);">{{ r.created_at[:10] }}</td>
+          <td>
+            <a href="/fine/{{ rid }}" target="_blank" class="btn btn-outline btn-sm">📄</a>
+            {% if r.status == 'pending' %}
+              <button onclick="payFine('{{ rid }}')" class="btn btn-success btn-sm">💳</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align:center;color:var(--muted);padding:40px;">
+            No violations yet. <a href="/detect" style="color:var(--accent);">Detect one →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+async function payFine(id) {
+  if (!confirm('Mark fine as PAID?')) return;
+  const r = await fetch(`/pay/${id}`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) { showToast('Payment recorded!', 'success'); setTimeout(() => location.reload(), 1500); }
+}
+
+fetch('/api/stats').then(r => r.json()).then(data => {
+  const dark = 'rgba(255,255,255,0.07)';
+  const opts = {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: dark }, ticks: { color: '#64748b', font: { size: 11 } } },
+      y: { grid: { color: dark }, ticks: { color: '#64748b', font: { size: 11 } } }
+    }
+  };
+  if (data.by_type.length > 0) {
+    new Chart(document.getElementById('typeChart'), {
+      type: 'bar',
+      data: {
+        labels: data.by_type.map(d => d.violation_name),
+        datasets: [{ data: data.by_type.map(d => d.count),
+          backgroundColor: ['#3b82f6','#8b5cf6','#f59e0b','#ef4444','#22c55e','#06b6d4','#ec4899','#f97316','#84cc16','#a855f7'],
+          borderRadius: 6, borderSkipped: false }]
+      },
+      options: opts
+    });
+  }
+  if (data.monthly.length > 0) {
+    new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels: data.monthly.map(d => d.month).reverse(),
+        datasets: [{ data: data.monthly.map(d => d.count).reverse(),
+          borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)',
+          fill: true, tension: 0.4, pointBackgroundColor: '#3b82f6', pointRadius: 5 }]
+      },
+      options: opts
+    });
+  }
+});
+</script>
+{% endblock %}

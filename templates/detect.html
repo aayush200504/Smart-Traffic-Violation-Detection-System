@@ -1,0 +1,851 @@
+{% extends "base.html" %}
+{% block title %}Detect Violation{% endblock %}
+{% block page_title %}📷 Detect Traffic Violation{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+
+  <!-- LEFT PANEL -->
+  <div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title" style="margin-bottom:20px;">🚗 Vehicle Image and Violation</div>
+
+      <div class="form-group">
+        <label>Violation Type</label>
+        <select id="violationType">
+          <option value="red_light">Red Light Jumping — Rs.1,500</option>
+          <option value="helmet">Helmetless Riding — Rs.500</option>
+          <option value="wrong_lane">Wrong Lane Driving — Rs.1,000</option>
+          <option value="speeding">Over Speeding — Rs.2,000</option>
+          <option value="no_seatbelt">No Seat Belt — Rs.1,000</option>
+          <option value="mobile_use">Mobile Phone Use — Rs.5,000</option>
+          <option value="triple_riding">Triple Riding — Rs.1,000</option>
+          <option value="no_parking">No Parking — Rs.500</option>
+          <option value="hit_run">Hit and Run — Rs.25,000</option>
+          <option value="drunk_driving">Drunk Driving — Rs.10,000</option>
+        </select>
+      </div>
+
+      <!-- ANPR Mode Selector -->
+      <div class="form-group">
+        <label>ANPR - Number Plate Detection Method</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+          <button type="button" onclick="setAnprMode('auto')" id="modeAuto"
+            style="padding:10px 8px;border-radius:8px;border:1px solid rgba(59,130,246,0.4);background:rgba(59,130,246,0.15);color:var(--accent2);font-size:12px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;">
+            Auto ANPR<br><span style="font-size:10px;font-weight:400;opacity:0.8;">from vehicle photo</span>
+          </button>
+          <button type="button" onclick="setAnprMode('plate')" id="modePlate"
+            style="padding:10px 8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;">
+            Plate Photo<br><span style="font-size:10px;font-weight:400;opacity:0.8;">upload plate closeup</span>
+          </button>
+          <button type="button" onclick="setAnprMode('manual')" id="modeManual"
+            style="padding:10px 8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;">
+            Manual Entry<br><span style="font-size:10px;font-weight:400;opacity:0.8;">type plate number</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Vehicle Image Upload (hidden in manual mode) -->
+      <div id="vehicleImageSection" class="form-group">
+        <label>Vehicle Image (Full Photo)</label>
+        <div id="dropZone" style="border:2px dashed rgba(59,130,246,0.4);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;background:rgba(59,130,246,0.03);"
+          onclick="document.getElementById('imageInput').click()"
+          ondragover="event.preventDefault();this.style.borderColor='#3b82f6'"
+          ondragleave="this.style.borderColor='rgba(59,130,246,0.4)'"
+          ondrop="handleDrop(event)">
+          <div id="dropContent">
+            <div style="font-size:48px;margin-bottom:12px;">📸</div>
+            <div style="font-weight:600;margin-bottom:6px;">Drop vehicle image here</div>
+            <div style="font-size:12px;color:var(--muted);">or click to browse - JPG, PNG, WEBP</div>
+          </div>
+          <img id="previewImg" style="max-width:100%;max-height:200px;border-radius:8px;display:none;">
+        </div>
+        <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleFile(this.files[0])">
+      </div>
+
+      <!-- Plate Photo Upload -->
+      <div id="plateScanSection" class="form-group" style="display:none;">
+        <label>Number Plate Close-up Photo</label>
+        <div id="plateDropZone" style="border:2px dashed rgba(245,158,11,0.5);border-radius:12px;padding:30px 20px;text-align:center;cursor:pointer;background:rgba(245,158,11,0.04);"
+          onclick="document.getElementById('plateImageInput').click()"
+          ondragover="event.preventDefault();this.style.borderColor='#f59e0b'"
+          ondragleave="this.style.borderColor='rgba(245,158,11,0.5)'"
+          ondrop="handlePlateDrop(event)">
+          <div id="plateDropContent">
+            <div style="font-size:36px;margin-bottom:8px;">🔢</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px;">Upload Number Plate Photo</div>
+            <div style="font-size:11px;color:var(--muted);">Clear close-up, good lighting, straight angle</div>
+          </div>
+          <img id="platePreviewImg" style="max-width:100%;max-height:120px;border-radius:8px;display:none;">
+        </div>
+        <input type="file" id="plateImageInput" accept="image/*" style="display:none;" onchange="handlePlateFile(this.files[0])">
+        <button type="button" onclick="scanPlateImage()" id="scanPlateBtn"
+          style="display:none;margin-top:8px;width:100%;padding:10px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:var(--amber);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:'Space Grotesk',sans-serif;">
+          Scan Plate Number
+        </button>
+        <div id="plateScanResult" style="display:none;margin-top:8px;padding:10px 14px;border-radius:8px;font-size:13px;border:1px solid transparent;"></div>
+      </div>
+
+      <!-- Manual Plate -->
+      <div id="manualPlateSection" class="form-group" style="display:none;">
+        <label>Enter Number Plate Manually</label>
+        <input type="text" id="manualPlate" placeholder="e.g. MH12MN6565"
+          style="font-family:'JetBrains Mono',monospace;font-size:18px;letter-spacing:3px;text-transform:uppercase;padding:12px 16px;"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')">
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;">Format: MH12MN6565 (no spaces) — No image needed</div>
+      </div>
+
+      <input type="hidden" id="resolvedPlate">
+
+      <button onclick="submitDetection()" id="detectBtn" class="btn btn-primary" style="width:100%;padding:14px;font-size:15px;">
+        Analyze and Generate e-Challan
+      </button>
+    </div>
+
+    <!-- Sample Plates -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Sample Registered Vehicles</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        {% set plates = [('MH12MN6565','Rahul Sharma'),('MH14AB1234','Priya Patel'),('MH20CD5678','Amit Kumar'),('MH12XY9090','Sneha Desai'),('DL01AB4321','Vikram Singh')] %}
+        {% for plate, name in plates %}
+        <button onclick="setPlate('{{ plate }}')" title="{{ name }}"
+          style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:var(--accent2);padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;">
+          {{ plate }}
+        </button>
+        {% endfor %}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">Click any plate to auto-fill in Manual mode</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div>
+    <!-- Processing -->
+    <div id="processingCard" class="card" style="display:none;text-align:center;padding:60px 20px;">
+      <div style="font-size:60px;animation:spin 1s linear infinite;display:inline-block;">⚙️</div>
+      <div style="font-size:16px;font-weight:600;margin-top:20px;" id="processingStep">Analyzing image...</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px;" id="processingDetail">Running ANPR and Violation Detection</div>
+      <div style="margin-top:20px;background:rgba(255,255,255,0.07);border-radius:8px;height:4px;overflow:hidden;">
+        <div id="progressBar" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));width:30%;transition:width 0.3s;border-radius:8px;animation:progressAnim 1.5s ease-in-out infinite;"></div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="card" style="text-align:center;padding:60px 20px;">
+      <div style="font-size:60px;margin-bottom:20px;">🚦</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Ready to Detect</div>
+      <div style="font-size:13px;color:var(--muted);">Upload a vehicle image and select violation type to generate an e-Challan</div>
+    </div>
+
+    <!-- Result Card -->
+    <div id="resultCard" style="display:none;">
+
+      <!-- ANPR Result -->
+      <div class="card" style="margin-bottom:16px;border-color:rgba(59,130,246,0.2);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="font-size:20px;">🔢</span>
+          <div style="font-size:14px;font-weight:600;">ANPR Result</div>
+          <span id="anprConfidence" style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;font-weight:700;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div id="detectedPlate" style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;background:rgba(59,130,246,0.1);border:2px solid rgba(59,130,246,0.3);padding:10px 20px;border-radius:10px;color:var(--accent2);letter-spacing:4px;"></div>
+          <div>
+            <div id="ownerName" style="font-weight:600;font-size:15px;"></div>
+            <div id="ownerEmail" style="font-size:12px;color:var(--muted);"></div>
+            <div id="ownerPhone" style="font-size:12px;color:var(--muted);"></div>
+          </div>
+        </div>
+
+        <!-- Accuracy Score Gauge -->
+        <div id="accuracyBlock" style="margin-top:16px;padding:14px 16px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">OCR Recognition Accuracy</div>
+            <div id="accuracyPct" style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;">0%</div>
+          </div>
+          <div style="height:10px;border-radius:99px;background:rgba(255,255,255,0.08);overflow:hidden;">
+            <div id="accuracyBar" style="height:100%;width:0%;border-radius:99px;transition:width 1s cubic-bezier(0.4,0,0.2,1);background:linear-gradient(90deg,#22c55e,#16a34a);"></div>
+          </div>
+          <div id="accuracyLabel" style="margin-top:7px;font-size:11px;color:var(--muted);"></div>
+        </div>
+      </div>
+
+      <!-- Annotated Image Viewer (plate border highlight) -->
+      <div id="plateImageCard" class="card" style="margin-bottom:16px;border-color:rgba(0,255,100,0.2);display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <span style="font-size:18px;">🎯</span>
+          <div style="font-size:13px;font-weight:600;color:#4ade80;">Plate Detection Preview</div>
+          <span id="plateFocusBadge" style="margin-left:auto;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(0,255,100,0.12);color:#4ade80;border:1px solid rgba(0,255,100,0.3);font-weight:700;animation:plateGlow 2s ease-in-out infinite;">● PLATE FOCUSED</span>
+        </div>
+        <div style="position:relative;border-radius:10px;overflow:hidden;background:#0a0e1a;border:1px solid rgba(0,255,100,0.2);">
+          <img id="annotatedImg" src="" alt="Annotated vehicle image"
+            style="width:100%;max-height:260px;object-fit:contain;display:block;border-radius:10px;">
+          <div id="noPlateOverlay" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,14,26,0.7);">
+            <div style="text-align:center;color:var(--muted);">
+              <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+              <div style="font-size:12px;">Plate region not isolated</div>
+            </div>
+          </div>
+        </div>
+        <div id="plateBBoxInfo" style="margin-top:8px;font-size:11px;color:var(--muted);"></div>
+      </div>
+      <div class="card" style="margin-bottom:16px;border-color:rgba(239,68,68,0.2);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+          <span style="font-size:20px;">⚠️</span>
+          <div style="font-size:14px;font-weight:600;">Violation and Fine Details</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+          <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Challan ID</div>
+            <div id="challanId" style="font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:4px;"></div>
+          </div>
+          <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Violation</div>
+            <div id="violationName" style="font-size:13px;font-weight:600;margin-top:4px;"></div>
+          </div>
+          <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:14px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Legal Section</div>
+            <div id="legalSection" style="font-size:13px;margin-top:4px;"></div>
+          </div>
+          <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:14px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Fine Amount</div>
+            <div id="fineAmount" style="font-size:24px;font-weight:800;color:var(--red);margin-top:4px;font-family:'JetBrains Mono',monospace;"></div>
+          </div>
+        </div>
+
+        <div id="emailStatus" style="font-size:12px;padding:10px;border-radius:6px;margin-bottom:16px;"></div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <a id="pdfLink" href="#" target="_blank" class="btn btn-primary">Download e-Challan PDF</a>
+          <button id="payBtn" onclick="payCurrentFine()" class="btn btn-success">💳 Pay Fine via Razorpay</button>
+          <button onclick="resetForm()" class="btn btn-outline">New Detection</button>
+        </div>
+      </div>
+
+      <!-- Payment info -->
+      <div class="card" style="background:rgba(59,130,246,0.05);border-color:rgba(59,130,246,0.2);">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Payment Gateway</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Click Pay Fine above to process payment via Razorpay.</div>
+        <div style="font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;">
+          <span style="background:rgba(34,197,94,0.1);color:var(--green);padding:2px 8px;border-radius:4px;">SSL Secured</span>
+          <span>UPI · Cards · Net Banking · Wallets</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     RAZORPAY DUMMY CHECKOUT MODAL
+════════════════════════════════════════════════════════════════ -->
+<div id="rzpOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+  <div id="rzpModal" style="background:#fff;border-radius:16px;width:420px;max-width:95vw;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.5);font-family:'Inter',sans-serif;color:#1a1a2e;position:relative;max-height:90vh;overflow-y:auto;">
+
+    <!-- Razorpay Header Bar -->
+    <div style="background:linear-gradient(135deg,#072654 0%,#1e3a8a 100%);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="background:#3b82f6;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;">💳</div>
+        <div>
+          <div style="color:#fff;font-weight:700;font-size:14px;">Traffic Fine Payment</div>
+          <div style="color:rgba(255,255,255,0.6);font-size:11px;">Powered by Razorpay</div>
+        </div>
+      </div>
+      <button onclick="closeRzpModal()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+
+    <!-- Amount Strip -->
+    <div style="background:#f8faff;border-bottom:1px solid #e2e8f0;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Challan ID</div>
+        <div id="rzpChallanId" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#0A1628;margin-top:2px;"></div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Amount Due</div>
+        <div id="rzpAmount" style="font-size:22px;font-weight:800;color:#dc2626;font-family:'JetBrains Mono',monospace;margin-top:2px;"></div>
+      </div>
+    </div>
+
+    <!-- Payment Method Tabs -->
+    <div style="display:flex;border-bottom:2px solid #e2e8f0;background:#fff;">
+      <button onclick="rzpTab('upi')" id="rzpTabUpi" class="rzp-tab rzp-tab-active">
+        <span style="font-size:16px;">📱</span> UPI
+      </button>
+      <button onclick="rzpTab('card')" id="rzpTabCard" class="rzp-tab">
+        <span style="font-size:16px;">💳</span> Card
+      </button>
+      <button onclick="rzpTab('netbanking')" id="rzpTabNetbanking" class="rzp-tab">
+        <span style="font-size:16px;">🏦</span> Net Banking
+      </button>
+      <button onclick="rzpTab('wallet')" id="rzpTabWallet" class="rzp-tab">
+        <span style="font-size:16px;">👛</span> Wallet
+      </button>
+    </div>
+
+    <!-- UPI Panel -->
+    <div id="rzpPanelUpi" class="rzp-panel" style="padding:20px;">
+      <div style="text-align:center;margin-bottom:16px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Scan QR or enter UPI ID</div>
+        <!-- Fake QR -->
+        <div style="display:inline-block;background:#fff;border:2px solid #e2e8f0;border-radius:12px;padding:12px;">
+          <svg width="120" height="120" viewBox="0 0 120 120" style="display:block;">
+            <rect width="120" height="120" fill="white"/>
+            <rect x="8" y="8" width="40" height="40" fill="none" stroke="#000" stroke-width="3"/>
+            <rect x="16" y="16" width="24" height="24" fill="#000"/>
+            <rect x="72" y="8" width="40" height="40" fill="none" stroke="#000" stroke-width="3"/>
+            <rect x="80" y="16" width="24" height="24" fill="#000"/>
+            <rect x="8" y="72" width="40" height="40" fill="none" stroke="#000" stroke-width="3"/>
+            <rect x="16" y="80" width="24" height="24" fill="#000"/>
+            <rect x="56" y="56" width="8" height="8" fill="#000"/>
+            <rect x="72" y="56" width="8" height="8" fill="#000"/>
+            <rect x="88" y="56" width="8" height="8" fill="#000"/>
+            <rect x="56" y="72" width="8" height="8" fill="#000"/>
+            <rect x="72" y="72" width="8" height="8" fill="#000"/>
+            <rect x="88" y="72" width="8" height="8" fill="#000"/>
+            <rect x="56" y="88" width="8" height="8" fill="#000"/>
+            <rect x="88" y="88" width="8" height="8" fill="#000"/>
+            <rect x="104" y="72" width="8" height="8" fill="#000"/>
+            <rect x="104" y="88" width="8" height="8" fill="#000"/>
+          </svg>
+        </div>
+        <div style="font-size:10px;color:#64748b;margin-top:6px;">traffic@upi · Scan with any UPI app</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <div style="flex:1;height:1px;background:#e2e8f0;"></div>
+        <span style="font-size:11px;color:#94a3b8;">OR</span>
+        <div style="flex:1;height:1px;background:#e2e8f0;"></div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:6px;">Enter UPI ID</label>
+        <input type="text" id="upiId" placeholder="yourname@upi" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;color:#1a1a2e;" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <button onclick="simulatePayment()" class="rzp-pay-btn">Pay with UPI</button>
+      <div style="display:flex;justify-content:center;gap:12px;margin-top:14px;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/UPI-Logo-vector.svg/100px-UPI-Logo-vector.svg.png" alt="UPI" style="height:18px;opacity:0.6;" onerror="this.style.display='none'">
+        <span style="font-size:10px;color:#94a3b8;align-self:center;">GPay · PhonePe · Paytm · BHIM</span>
+      </div>
+    </div>
+
+    <!-- Card Panel -->
+    <div id="rzpPanelCard" class="rzp-panel" style="padding:20px;display:none;">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:6px;">Card Number</label>
+        <input type="text" placeholder="4111 1111 1111 1111" maxlength="19"
+          style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:'JetBrains Mono',monospace;letter-spacing:2px;outline:none;"
+          oninput="formatCard(this)" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="font-size:12px;color:#64748b;display:block;margin-bottom:6px;">Expiry (MM/YY)</label>
+          <input type="text" placeholder="12/27" maxlength="5"
+            style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;"
+            onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+        </div>
+        <div>
+          <label style="font-size:12px;color:#64748b;display:block;margin-bottom:6px;">CVV</label>
+          <input type="password" placeholder="•••" maxlength="4"
+            style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;"
+            onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:6px;">Name on Card</label>
+        <input type="text" placeholder="RAHUL SHARMA"
+          style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;"
+          onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <button onclick="simulatePayment()" class="rzp-pay-btn">Pay Securely</button>
+      <div style="display:flex;justify-content:center;gap:8px;margin-top:14px;align-items:center;">
+        <span style="font-size:10px;color:#94a3b8;">🔒 Secured by</span>
+        <span style="font-size:10px;font-weight:700;color:#3b82f6;">Razorpay</span>
+        <span style="font-size:10px;color:#94a3b8;">· Visa · Mastercard · RuPay</span>
+      </div>
+    </div>
+
+    <!-- Net Banking Panel -->
+    <div id="rzpPanelNetbanking" class="rzp-panel" style="padding:20px;display:none;">
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Select your bank</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+        {% for bank in [('SBI','🏛️'),('HDFC','🏦'),('ICICI','💼'),('Axis','🔵'),('Kotak','🟠'),('PNB','🟢'),('BOB','🔴'),('Yes Bank','⭐')] %}
+        <button onclick="selectBank(this,'{{ bank[0] }}')"
+          style="padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:500;text-align:left;display:flex;align-items:center;gap:6px;color:#1a1a2e;transition:all 0.15s;">
+          {{ bank[1] }} {{ bank[0] }}
+        </button>
+        {% endfor %}
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:6px;">Or search other bank</label>
+        <input type="text" placeholder="Enter bank name..." style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <button onclick="simulatePayment()" class="rzp-pay-btn">Proceed to Net Banking</button>
+    </div>
+
+    <!-- Wallet Panel -->
+    <div id="rzpPanelWallet" class="rzp-panel" style="padding:20px;display:none;">
+      <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Select wallet</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+        {% for w in [('Paytm','💰'),('PhonePe','💜'),('Amazon Pay','📦'),('Mobikwik','🔷'),('Ola Money','🟡'),('JioMoney','⚡')] %}
+        <button onclick="selectWallet(this,'{{ w[0] }}')"
+          style="padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:500;text-align:left;display:flex;align-items:center;gap:6px;color:#1a1a2e;transition:all 0.15s;">
+          {{ w[1] }} {{ w[0] }}
+        </button>
+        {% endfor %}
+      </div>
+      <button onclick="simulatePayment()" class="rzp-pay-btn">Pay via Wallet</button>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:10px 20px;background:#f8faff;border-top:1px solid #e2e8f0;text-align:center;">
+      <span style="font-size:10px;color:#94a3b8;">🔒 256-bit SSL Encrypted · PCI DSS Compliant · Razorpay Safe</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- Payment Success Overlay -->
+<div id="rzpSuccess" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10000;align-items:center;justify-content:center;backdrop-filter:blur(6px);">
+  <div style="background:#fff;border-radius:20px;padding:48px 40px;text-align:center;max-width:360px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.4);">
+    <div id="rzpSuccessIcon" style="font-size:72px;margin-bottom:16px;animation:popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275);">✅</div>
+    <div style="font-size:22px;font-weight:800;color:#16a34a;margin-bottom:8px;">Payment Successful!</div>
+    <div style="font-size:14px;color:#64748b;margin-bottom:6px;">Fine has been marked as <strong>PAID</strong></div>
+    <div id="rzpSuccessChallan" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#1e3a8a;margin-bottom:24px;"></div>
+    <a id="rzpPaidPdfLink" href="#" target="_blank"
+      style="display:block;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:12px;">
+      📄 Download PAID e-Challan PDF
+    </a>
+    <button onclick="closeSuccess()"
+      style="background:transparent;border:1.5px solid #e2e8f0;color:#64748b;padding:10px 24px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;width:100%;">
+      Close
+    </button>
+  </div>
+</div>
+
+<style>
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes progressAnim { 0%{width:20%} 50%{width:75%} 100%{width:20%} }
+@keyframes popIn { 0%{transform:scale(0)} 100%{transform:scale(1)} }
+@keyframes accuracyPulse {
+  0%,100% { opacity:1; } 50% { opacity:0.7; }
+}
+@keyframes plateGlow {
+  0%,100% { opacity:1; box-shadow:0 0 6px rgba(0,255,100,0.4); }
+  50%      { opacity:0.7; box-shadow:0 0 14px rgba(0,255,100,0.8); }
+}
+
+.rzp-tab {
+  flex:1;padding:10px 4px;border:none;background:#fff;cursor:pointer;
+  font-size:11px;font-weight:600;color:#64748b;display:flex;flex-direction:column;
+  align-items:center;gap:3px;border-bottom:2px solid transparent;
+  transition:all 0.2s;font-family:'Space Grotesk',sans-serif;
+}
+.rzp-tab:hover { color:#3b82f6;background:#f0f7ff; }
+.rzp-tab-active { color:#1e3a8a!important;border-bottom:2px solid #3b82f6!important;background:#f0f7ff!important; }
+
+.rzp-pay-btn {
+  width:100%;padding:14px;background:linear-gradient(135deg,#3b82f6,#1e3a8a);
+  color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;
+  cursor:pointer;letter-spacing:0.5px;transition:opacity 0.2s;font-family:'Space Grotesk',sans-serif;
+}
+.rzp-pay-btn:hover { opacity:0.92; }
+.rzp-pay-btn:active { transform:scale(0.98); }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+var currentFile = null;
+var currentPlateFile = null;
+var currentViolationId = null;
+var currentAmount = 0;
+var currentViolationName = '';
+var anprMode = 'auto';
+
+function setAnprMode(mode) {
+  anprMode = mode;
+  ['auto','plate','manual'].forEach(function(m) {
+    var btn = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+    btn.style.background = 'transparent';
+    btn.style.color = 'var(--muted)';
+    btn.style.borderColor = 'var(--border)';
+  });
+  var ab = document.getElementById('mode' + mode.charAt(0).toUpperCase() + mode.slice(1));
+  ab.style.background = 'rgba(59,130,246,0.15)';
+  ab.style.color = 'var(--accent2)';
+  ab.style.borderColor = 'rgba(59,130,246,0.4)';
+
+  // Show/hide sections based on mode
+  document.getElementById('vehicleImageSection').style.display = (mode === 'manual') ? 'none' : 'block';
+  document.getElementById('plateScanSection').style.display   = (mode === 'plate')  ? 'block' : 'none';
+  document.getElementById('manualPlateSection').style.display = (mode === 'manual') ? 'block' : 'none';
+}
+
+function setPlate(plate) {
+  document.getElementById('resolvedPlate').value = plate;
+  document.getElementById('manualPlate').value = plate;
+  setAnprMode('manual');
+  showToast('Plate set: ' + plate, 'info');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').style.borderColor = 'rgba(59,130,246,0.4)';
+  var file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+}
+function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  currentFile = file;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    document.getElementById('dropContent').style.display = 'none';
+    var img = document.getElementById('previewImg');
+    img.src = ev.target.result;
+    img.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function handlePlateDrop(e) {
+  e.preventDefault();
+  var file = e.dataTransfer.files[0];
+  if (file) handlePlateFile(file);
+}
+function handlePlateFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  currentPlateFile = file;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    document.getElementById('plateDropContent').style.display = 'none';
+    var img = document.getElementById('platePreviewImg');
+    img.src = ev.target.result;
+    img.style.display = 'block';
+    document.getElementById('scanPlateBtn').style.display = 'block';
+    document.getElementById('plateScanResult').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function scanPlateImage() {
+  if (!currentPlateFile) return;
+  var btn = document.getElementById('scanPlateBtn');
+  btn.textContent = 'Scanning...';
+  btn.disabled = true;
+  var formData = new FormData();
+  formData.append('plate_image', currentPlateFile);
+  try {
+    var r = await fetch('/anpr/scan', { method: 'POST', body: formData });
+    var d = await r.json();
+    var el = document.getElementById('plateScanResult');
+    el.style.display = 'block';
+    if (d.success && d.plate) {
+      var acc = d.accuracy || 0;
+      var accColor = acc >= 75 ? '#22c55e' : acc >= 50 ? '#f59e0b' : '#ef4444';
+      var accLabel = acc >= 75 ? 'High Confidence' : acc >= 50 ? 'Medium Confidence' : 'Low Confidence';
+      el.style.background = 'rgba(34,197,94,0.08)';
+      el.style.border = '1px solid rgba(34,197,94,0.3)';
+      el.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+        + '<span>Detected: <strong style="font-family:monospace;font-size:16px;letter-spacing:2px;">' + d.plate + '</strong></span>'
+        + '<button onclick="acceptPlate(\'' + d.plate + '\')" style="padding:4px 14px;border-radius:6px;background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.3);color:var(--green);cursor:pointer;font-weight:600;font-family:\'Space Grotesk\',sans-serif;">Use This ✓</button>'
+        + '</div>'
+        + '<div style="margin-bottom:4px;display:flex;justify-content:space-between;">'
+        + '<span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">OCR Accuracy</span>'
+        + '<span style="font-size:12px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:' + accColor + ';">' + acc + '%</span>'
+        + '</div>'
+        + '<div style="height:7px;border-radius:99px;background:rgba(255,255,255,0.1);overflow:hidden;">'
+        + '<div id="scanAccBar" style="height:100%;width:0%;border-radius:99px;background:' + accColor + ';transition:width 1s cubic-bezier(0.4,0,0.2,1);"></div>'
+        + '</div>'
+        + '<div style="font-size:10px;color:' + accColor + ';margin-top:4px;">' + accLabel + '</div>';
+      setTimeout(function() {
+        var bar = document.getElementById('scanAccBar');
+        if (bar) bar.style.width = acc + '%';
+      }, 80);
+    } else {
+      el.style.background = 'rgba(245,158,11,0.1)';
+      el.style.border = '1px solid rgba(245,158,11,0.3)';
+      el.innerHTML = 'Could not read plate. <button onclick="setAnprMode(\'manual\')" style="color:var(--amber);background:none;border:none;cursor:pointer;text-decoration:underline;">Enter manually</button>';
+    }
+  } catch(err) {
+    showToast('Scan error: ' + err.message, 'error');
+  }
+  btn.textContent = 'Scan Plate Number';
+  btn.disabled = false;
+}
+
+function acceptPlate(plate) {
+  document.getElementById('resolvedPlate').value = plate;
+  showToast('Plate accepted: ' + plate, 'success');
+  document.getElementById('plateScanResult').innerHTML += ' <span style="color:var(--green);font-weight:700;">[CONFIRMED]</span>';
+}
+
+async function submitDetection() {
+  var isManual = (anprMode === 'manual');
+  var finalPlate = '';
+
+  if (isManual) {
+    finalPlate = document.getElementById('manualPlate').value.trim();
+    if (!finalPlate) { showToast('Please enter a plate number', 'error'); return; }
+  } else {
+    if (!currentFile) { showToast('Please upload a vehicle image', 'error'); return; }
+    if (anprMode === 'plate') {
+      finalPlate = document.getElementById('resolvedPlate').value.trim();
+      if (!finalPlate) { showToast('Please scan the plate photo first', 'error'); return; }
+    }
+  }
+
+  var violationType = document.getElementById('violationType').value;
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('processingCard').style.display = 'block';
+  document.getElementById('detectBtn').disabled = true;
+  document.getElementById('processingStep').textContent = isManual ? 'Generating e-Challan...' : 'Analyzing image & reading plate...';
+  document.getElementById('processingDetail').textContent = isManual ? 'Processing manual plate entry' : 'Running ANPR and violation detection';
+
+  var fd = new FormData();
+  fd.append('violation_type', violationType);
+  fd.append('manual_plate', finalPlate);
+  fd.append('is_manual', isManual ? 'true' : 'false');
+  if (!isManual && currentFile) fd.append('image', currentFile);
+  if (currentPlateFile && anprMode === 'plate') fd.append('plate_image', currentPlateFile);
+
+  try {
+    var response = await fetch('/detect', { method: 'POST', body: fd });
+    var data = await response.json();
+    document.getElementById('processingCard').style.display = 'none';
+    document.getElementById('detectBtn').disabled = false;
+    if (!data.success) {
+      showToast(data.error || 'Detection failed', 'error');
+      document.getElementById('emptyState').style.display = 'block';
+      return;
+    }
+    showResult(data);
+  } catch(e) {
+    showToast('Server error: ' + e.message, 'error');
+    document.getElementById('processingCard').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('detectBtn').disabled = false;
+  }
+}
+
+function showResult(data) {
+  currentViolationId = data.violation_id;
+  currentAmount = data.amount;
+  currentViolationName = data.violation.name;
+
+  var plateEl = document.getElementById('detectedPlate');
+  plateEl.textContent = data.plate_number;
+
+  var acc = (data.anpr_accuracy != null) ? data.anpr_accuracy : (data.anpr_detected ? 85 : 0);
+
+  // ── Confidence badge ──────────────────────────────────────────────────────
+  var confEl = document.getElementById('anprConfidence');
+  if (data.anpr_detected) {
+    confEl.textContent = '✓ PLATE CONFIRMED';
+    confEl.style.cssText = 'margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3);font-weight:700;';
+    plateEl.style.borderColor = 'rgba(34,197,94,0.5)';
+    plateEl.style.background  = 'rgba(34,197,94,0.06)';
+    plateEl.style.color       = '#4ade80';
+  } else {
+    confEl.textContent = '⚠ PLATE NOT READ';
+    confEl.style.cssText = 'margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.3);font-weight:700;';
+    plateEl.style.borderColor = 'rgba(245,158,11,0.5)';
+    plateEl.style.background  = 'rgba(245,158,11,0.06)';
+    plateEl.style.color       = '#fbbf24';
+  }
+
+  // ── Accuracy gauge ────────────────────────────────────────────────────────
+  var accColor  = acc >= 75 ? '#22c55e' : acc >= 50 ? '#f59e0b' : '#ef4444';
+  var accGrad   = acc >= 75
+    ? 'linear-gradient(90deg,#22c55e,#16a34a)'
+    : acc >= 50
+    ? 'linear-gradient(90deg,#f59e0b,#d97706)'
+    : 'linear-gradient(90deg,#ef4444,#dc2626)';
+  var accDesc   = acc >= 75
+    ? (acc >= 90 ? '🟢 Excellent — high-confidence recognition' : '🟢 Good — reliable recognition')
+    : acc >= 50
+    ? '🟡 Fair — image may be blurry or partially obscured'
+    : '🔴 Low — image is heavily degraded; consider Manual Entry';
+
+  document.getElementById('accuracyPct').textContent  = acc + '%';
+  document.getElementById('accuracyPct').style.color   = accColor;
+  document.getElementById('accuracyBar').style.background = accGrad;
+  document.getElementById('accuracyLabel').textContent = accDesc;
+  document.getElementById('accuracyLabel').style.color = accColor;
+
+  setTimeout(function() {
+    document.getElementById('accuracyBar').style.width = acc + '%';
+  }, 80);
+
+  // ── Annotated image with plate border ────────────────────────────────────
+  var imgCard = document.getElementById('plateImageCard');
+  var annImg  = document.getElementById('annotatedImg');
+  if (data.annotated_image_url) {
+    annImg.src = data.annotated_image_url + '?t=' + Date.now();
+    imgCard.style.display = 'block';
+    document.getElementById('plateBBoxInfo').textContent =
+      data.anpr_detected
+        ? '🟢 Neon green border marks the detected number plate region'
+        : '⚠ No plate region isolated — full image shown';
+    document.getElementById('noPlateOverlay').style.display = data.anpr_detected ? 'none' : 'flex';
+  } else {
+    imgCard.style.display = 'none';
+  }
+
+  // ── Owner info ────────────────────────────────────────────────────────────
+  var owner = data.owner;
+  if (owner) {
+    document.getElementById('ownerName').textContent  = owner.name;
+    document.getElementById('ownerEmail').textContent = owner.email || '';
+    document.getElementById('ownerPhone').textContent = owner.phone || '';
+  } else {
+    document.getElementById('ownerName').textContent  = 'Owner Not Found';
+    document.getElementById('ownerEmail').textContent = '';
+    document.getElementById('ownerPhone').textContent = '';
+  }
+
+  document.getElementById('challanId').textContent     = data.violation_id;
+  document.getElementById('violationName').textContent = data.violation.name;
+  document.getElementById('legalSection').textContent  = data.violation.section;
+  document.getElementById('fineAmount').textContent    = 'Rs. ' + data.amount.toLocaleString() + '/-';
+  document.getElementById('pdfLink').href              = data.pdf_url;
+
+  var el = document.getElementById('emailStatus');
+  if (data.email_sent) {
+    el.style.cssText = 'background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:6px;padding:10px;margin-bottom:16px;font-size:12px;color:var(--green);';
+    el.textContent = '\u2714 Fine PDF sent to ' + (owner ? owner.email : '');
+  } else if (!data.anpr_detected && data.plate_number !== 'UNKNOWN') {
+    el.style.cssText = 'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px;margin-bottom:16px;font-size:12px;color:#f87171;';
+    el.textContent = '\u26a0 OCR could not read the plate \u2014 try the "Plate Photo" mode for better accuracy, or use Manual Entry';
+  } else {
+    el.style.cssText = 'background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:6px;padding:10px;margin-bottom:16px;font-size:12px;color:var(--amber);';
+    el.textContent = 'Email notification not configured \u2014 configure SMTP in notifier.py';
+  }
+
+  document.getElementById('resultCard').style.display = 'block';
+  showToast(
+    data.anpr_detected
+      ? '\u2714 Challan generated: ' + data.plate_number + ' (' + acc + '% accuracy)'
+      : 'e-Challan generated',
+    data.anpr_detected ? 'success' : 'warning'
+  );
+}
+
+// ── Razorpay Dummy Payment UI ──────────────────────────────────────────────
+function payCurrentFine() {
+  if (!currentViolationId) return;
+  document.getElementById('rzpChallanId').textContent = currentViolationId;
+  document.getElementById('rzpAmount').textContent = 'Rs. ' + currentAmount.toLocaleString() + '/-';
+  document.getElementById('rzpOverlay').style.display = 'flex';
+  rzpTab('upi');
+}
+
+function closeRzpModal() {
+  document.getElementById('rzpOverlay').style.display = 'none';
+}
+
+function rzpTab(tab) {
+  ['upi','card','netbanking','wallet'].forEach(function(t) {
+    document.getElementById('rzpPanel' + cap(t)).style.display = 'none';
+    document.getElementById('rzpTab' + cap(t)).classList.remove('rzp-tab-active');
+  });
+  document.getElementById('rzpPanel' + cap(tab)).style.display = 'block';
+  document.getElementById('rzpTab' + cap(tab)).classList.add('rzp-tab-active');
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function selectBank(btn, name) {
+  document.querySelectorAll('#rzpPanelNetbanking button').forEach(function(b) {
+    b.style.borderColor = '#e2e8f0'; b.style.background = '#fff'; b.style.color = '#1a1a2e';
+  });
+  btn.style.borderColor = '#3b82f6';
+  btn.style.background = '#eff6ff';
+  btn.style.color = '#1e3a8a';
+}
+
+function selectWallet(btn, name) {
+  document.querySelectorAll('#rzpPanelWallet button').forEach(function(b) {
+    b.style.borderColor = '#e2e8f0'; b.style.background = '#fff'; b.style.color = '#1a1a2e';
+  });
+  btn.style.borderColor = '#3b82f6';
+  btn.style.background = '#eff6ff';
+  btn.style.color = '#1e3a8a';
+}
+
+function formatCard(input) {
+  var v = input.value.replace(/\s+/g,'').replace(/[^0-9]/gi,'');
+  var matches = v.match(/\d{4,16}/g);
+  var match = (matches && matches[0]) || '';
+  var parts = [];
+  for (var i=0; i<match.length; i+=4) parts.push(match.substring(i,i+4));
+  input.value = parts.length ? parts.join(' ') : v;
+}
+
+async function simulatePayment() {
+  var overlay = document.getElementById('rzpOverlay');
+  // Show a processing state
+  var payBtns = overlay.querySelectorAll('.rzp-pay-btn');
+  payBtns.forEach(function(b) { b.textContent='Processing...'; b.disabled=true; });
+
+  await new Promise(function(r){ setTimeout(r,1800); });
+
+  // Call backend to mark as paid
+  try {
+    var res = await fetch('/pay/' + currentViolationId, { method: 'POST' });
+    var d = await res.json();
+
+    overlay.style.display = 'none';
+    payBtns.forEach(function(b){ b.disabled=false; });
+
+    if (d.success) {
+      // Update PDF link + show success screen
+      var paidUrl = d.pdf_url + '?t=' + Date.now();
+      document.getElementById('pdfLink').href = paidUrl;
+      document.getElementById('rzpPaidPdfLink').href = paidUrl;
+      document.getElementById('rzpSuccessChallan').textContent = 'Challan: ' + currentViolationId;
+      document.getElementById('rzpSuccess').style.display = 'flex';
+
+      // Update Pay button to PAID
+      var payBtn = document.getElementById('payBtn');
+      payBtn.textContent = '✔ PAID';
+      payBtn.disabled = true;
+      payBtn.style.background = 'rgba(34,197,94,0.2)';
+      payBtn.style.borderColor = 'rgba(34,197,94,0.4)';
+      payBtn.style.color = 'var(--green)';
+
+      showToast('\u2714 Payment successful! Invoice updated to PAID.', 'success');
+    }
+  } catch(e) {
+    overlay.style.display = 'none';
+    showToast('Payment error: ' + e.message, 'error');
+  }
+}
+
+function closeSuccess() {
+  document.getElementById('rzpSuccess').style.display = 'none';
+}
+
+// Close modal on overlay click
+document.getElementById('rzpOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeRzpModal();
+});
+
+function resetForm() {
+  currentFile = null; currentPlateFile = null; currentViolationId = null;
+  document.getElementById('previewImg').style.display = 'none';
+  document.getElementById('dropContent').style.display = 'block';
+  document.getElementById('platePreviewImg').style.display = 'none';
+  document.getElementById('plateDropContent').style.display = 'block';
+  document.getElementById('scanPlateBtn').style.display = 'none';
+  document.getElementById('plateScanResult').style.display = 'none';
+  document.getElementById('manualPlate').value = '';
+  document.getElementById('resolvedPlate').value = '';
+  document.getElementById('imageInput').value = '';
+  document.getElementById('plateImageInput').value = '';
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'block';
+  document.getElementById('plateImageCard').style.display = 'none';
+  document.getElementById('annotatedImg').src = '';
+  setAnprMode('auto');
+}
+</script>
+{% endblock %}
